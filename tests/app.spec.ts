@@ -1,4 +1,4 @@
-import { test,expect } from '@playwright/test';
+import { test,expect,type Page } from '@playwright/test';
 import { add,day,drag,exported,fixture,manage,open,stored,today } from './touch';
 test.beforeEach(async({page})=>open(page));
 test('2行の時刻入力と自由入力＋選択、自動整列、交互の経過時間行、320/390px表示',async({page})=>{
@@ -176,4 +176,57 @@ test('カレンダーの点は時刻または空白以外の日付タイトル�
   await page.getByLabel('バックアップJSON').setInputFiles({name:'restore.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(backup))});await page.getByRole('button',{name:'置き換えて復元'}).click();
   await indicator('2026-11-02',true);await indicator('2026-11-03',false);await indicator('2026-11-04',false);await indicator('2026-11-05',true);await indicator(today,true);await indicator('2026-11-07',false);
   expect(await stored(page)).toEqual(saved);
+});
+
+const menuOrder=['予定タイトル一覧','データ管理','AI確認用コピー','この日の予定を全削除','機能追加用メモ'];
+const menuItems=(page:Page)=>page.locator('.menu-items button').allTextContents();
+test('全削除は日別画面のメニューだけに赤字で表示し、時刻がない日は「削除する予定がありません」と表示する',async({page})=>{
+  await page.getByRole('button',{name:'メニュー',exact:true}).click();expect(await menuItems(page)).toEqual(['予定タイトル一覧','データ管理','機能追加用メモ']);await page.getByRole('button',{name:'閉じる',exact:true}).click();
+  await page.getByRole('button',{name:'予定一覧',exact:true}).click();await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('button',{name:'この日の予定を全削除'})).toHaveCount(0);await page.getByRole('button',{name:'閉じる',exact:true}).click();
+  await page.getByRole('button',{name:/11月7日/}).click();await page.getByLabel('日付タイトル').fill('タイトルだけ');await page.getByLabel('メモ').fill('メモだけ');await page.getByRole('button',{name:'メニュー',exact:true}).click();
+  expect(await menuItems(page)).toEqual(menuOrder);
+  const button=page.getByRole('button',{name:'この日の予定を全削除',exact:true});expect(await button.evaluate(el=>getComputedStyle(el).color)).toBe('rgb(170, 81, 74)');
+  const before=await stored(page);await button.click();
+  await expect(page.getByRole('status')).toHaveText('削除する予定がありません');await expect(page.locator('dialog[open]')).toHaveCount(0);expect(await stored(page)).toEqual(before);
+  await page.getByRole('button',{name:'メニュー',exact:true}).click();await page.getByRole('button',{name:'機能追加用メモ',exact:true}).click();await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('button',{name:'この日の予定を全削除'})).toHaveCount(0);
+});
+
+test('全削除は確認画面で件数を示し、キャンセルでは消さず、保存失敗時は残し、削除後は再起動しても空のまま',async({browser},info)=>{
+  const profile=info.outputPath('profile'),browserType=browser.browserType();
+  const launch=async()=>{const context=await browserType.launchPersistentContext(profile,{headless:true,offline:true,viewport:{width:320,height:740},isMobile:true,hasTouch:true,locale:'ja-JP',timezoneId:'Asia/Tokyo',args:['--disable-breakpad','--disable-crash-reporter',`--crash-dumps-dir=${info.outputPath('crashes')}`]});const page=context.pages()[0];await open(page);return {context,page};};
+  let {context,page}=await launch();
+  const data=fixture();data.days['2026-11-07']={title:'翌日',memo:'翌日のメモ',entries:[{id:'c',time:'09:00',nextDay:false,freeTitle:'別の日',titleId:null,elapsedTitle:'別の区間'}]};data.featureMemo='改善案';
+  await stored(page,data);await page.reload();await day(page);
+  const openConfirm=async()=>{await page.getByRole('button',{name:'メニュー',exact:true}).click();await page.getByRole('button',{name:'この日の予定を全削除',exact:true}).click();return page.getByRole('dialog',{name:'予定を全削除',exact:true});};
+  let dialog=await openConfirm();
+  await expect(dialog.locator('.confirm-text')).toHaveText('11月6日（金）の時刻2件と、経過時間タイトル1件を削除します。日付タイトルとメモは残ります。');
+  await expect(dialog.getByRole('button')).toHaveText(['','キャンセル','削除']);expect(await dialog.getByRole('button',{name:'削除',exact:true}).evaluate(el=>el.className)).toBe('danger-fill');
+  await dialog.getByRole('button',{name:'キャンセル',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.locator('.time-row')).toHaveCount(2);expect(await stored(page)).toEqual(data);
+  dialog=await openConfirm();
+  await page.evaluate(()=>{const original=IDBObjectStore.prototype.put;let fail=true;IDBObjectStore.prototype.put=function(value,key){if(fail&&key==='data'){fail=false;throw new DOMException('Full','QuotaExceededError');}return original.call(this,value,key);};});
+  await dialog.getByRole('button',{name:'削除',exact:true}).click();await expect(dialog).toBeVisible();await expect(dialog.getByRole('alert')).toContainText('容量');expect(await stored(page)).toEqual(data);await expect(page.locator('.time-row')).toHaveCount(2);
+  await dialog.getByRole('button',{name:'削除',exact:true}).click();await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.time-row,.elapsed-row')).toHaveCount(0);await expect(page.getByLabel('日付タイトル')).toHaveValue('通常日');await expect(page.getByLabel('メモ')).toHaveValue(data.days[today].memo);
+  const expected={...data,days:{...data.days,[today]:{...data.days[today],entries:[]}}};expect(await stored(page)).toEqual(expected);
+  await context.close();({context,page}=await launch());
+  await day(page);await expect(page.locator('.time-row,.elapsed-row')).toHaveCount(0);await expect(page.getByLabel('日付タイトル')).toHaveValue('通常日');expect(await stored(page)).toEqual(expected);
+  await context.close();
+});
+
+test('全削除の確認画面は年が違う日に年を付け、経過時間タイトル0件は表示せず、320/390/412pxで崩れない',async({page})=>{
+  const data=fixture();data.days['2025-11-06']={title:'',memo:'',entries:[{id:'old',time:'08:00',nextDay:false,freeTitle:'去年の予定',titleId:null,elapsedTitle:''}]};await stored(page,data);await page.reload();
+  for(let i=0;i<12;i++)await page.getByRole('button',{name:'前月',exact:true}).click();
+  await day(page,'2025-11-06');
+  for(const width of [320,390,412]){
+    await page.setViewportSize({width,height:740});
+    await page.getByRole('button',{name:'メニュー',exact:true}).click();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByRole('button',{name:'この日の予定を全削除',exact:true}).click();const dialog=page.getByRole('dialog',{name:'予定を全削除',exact:true});
+    await expect(dialog.locator('.confirm-text')).toHaveText('2025年11月6日（木）の時刻1件を削除します。日付タイトルとメモは残ります。');
+    const layout=await dialog.evaluate(el=>{const box=el.querySelector('section')!.getBoundingClientRect(),buttons=[...el.querySelectorAll('.confirm-actions button')].map(b=>b.getBoundingClientRect());return{left:box.left,right:box.right,overflow:el.scrollWidth>el.clientWidth,rowY:new Set(buttons.map(b=>Math.round(b.top))).size,inside:buttons.every(b=>b.left>=box.left&&b.right<=box.right)};});
+    expect(layout.left).toBeGreaterThanOrEqual(0);expect(layout.right).toBeLessThanOrEqual(width);expect(layout.overflow).toBe(false);expect(layout.rowY).toBe(1);expect(layout.inside).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await dialog.getByRole('button',{name:'キャンセル',exact:true}).click();
+  }
+  expect(await stored(page)).toEqual(data);
 });

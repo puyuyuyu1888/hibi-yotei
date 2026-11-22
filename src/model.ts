@@ -51,6 +51,8 @@ export function saveEntry(data: Data, date: string, draft: Entry): Data {
   return setDay(data, date, { entries: existing ? entries.map(e => e.id === saved.id ? saved : e) : [...entries, saved] });
 }
 export function removeEntry(data: Data, date: string, id: string): Data { return setDay(data, date, { entries: (data.days[date]?.entries ?? []).filter(e => e.id !== id) }); }
+// その日の時刻をすべて削除する（翌日指定・経過時間タイトルを含む）。日付タイトルとメモは残す。
+export function clearEntries(data: Data, date: string): Data { return setDay(data, date, { entries: [] }); }
 export function setElapsedTitle(data: Data, date: string, id: string, elapsedTitle: string): Data {
   if (/[\r\n]/.test(elapsedTitle)) throw new Error('区間タイトルを1行で入力してください。');
   return setDay(data, date, { entries: (data.days[date]?.entries ?? []).map(e => e.id === id ? { ...e, elapsedTitle } : e) });

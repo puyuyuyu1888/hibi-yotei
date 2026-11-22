@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { activeOptions, calendarDays, createId, dateKey, displayTitle, emptyDay, orderOptions, parseDate, removeEntry, removeOption, saveEntry, saveOption, setDay, setElapsedTitle, type Data, type Entry, type Option } from './model';
+import { activeOptions, calendarDays, clearEntries, createId, dateKey, displayTitle, emptyDay, orderOptions, parseDate, removeEntry, removeOption, saveEntry, saveOption, setDay, setElapsedTitle, type Data, type Entry, type Option } from './model';
 import { loadData, openAppDatabase, persistData, replaceData, type AppDatabase } from './storage';
 import { Autosave, autosaveKey } from './autosave';
 import { currentTimelineRow, formatElapsed, pointTime, timelineRows } from './timeline';
@@ -83,6 +83,24 @@ function Manager({ data, update }: { data: Data; update: (data: Data) => void })
     {deleting && <Modal title="候補を削除" onClose={() => setDeleting(null)}><p className="confirm-text">「{deleting.name}」を削除しますか？</p><div className="confirm-actions"><button className="secondary" onClick={() => setDeleting(null)}>キャンセル</button><button className="danger-fill" onClick={() => { update(removeOption(data, deleting.id)); setDeleting(null); setEdit(null); }}>削除</button></div></Modal>}
   </div>;
 }
+function ClearDayConfirm({ date, entries, now, onConfirm, onCancel }: { date: string; entries: Entry[]; now: Date; onConfirm: () => Promise<void>; onCancel: () => void }) {
+  const [error, setError] = useState(''), [saving, setSaving] = useState(false);
+  const locked = useRef(false);
+  const target = parseDate(date), titled = entries.filter(e => e.elapsedTitle.trim()).length;
+  const label = `${target.getFullYear() === now.getFullYear() ? '' : `${target.getFullYear()}年`}${target.getMonth() + 1}月${target.getDate()}日（${['日', '月', '火', '水', '木', '金', '土'][target.getDay()]}）`;
+  const confirm = async () => {
+    if (locked.current) return;
+    locked.current = true; setSaving(true); setError('');
+    try { await onConfirm(); }
+    catch (error) { setError((error as DOMException)?.name === 'QuotaExceededError' ? '保存容量が不足しています。' : (error as Error).message || '保存できませんでした。'); }
+    finally { locked.current = false; setSaving(false); }
+  };
+  return <Modal className="time-modal" title="予定を全削除" busy={saving} onClose={onCancel}>
+    <p className="confirm-text">{label}の時刻{entries.length}件{titled ? `と、経過時間タイトル${titled}件` : ''}を削除します。日付タイトルとメモは残ります。</p>
+    {error && <p className="field-error" role="alert">{error}</p>}
+    <div className="confirm-actions"><button className="secondary" disabled={saving} onClick={onCancel}>キャンセル</button><button className="danger-fill" disabled={saving} onClick={() => void confirm()}>削除</button></div>
+  </Modal>;
+}
 function FeatureMemo({ initial, onDraft, onFlush }: { initial: string; onDraft: (value: string) => void; onFlush: () => void }) {
   const [value, setValue] = useState(initial);
   return <section className="feature-memo" aria-label="機能追加用メモ"><textarea className="feature-memo-text" aria-label="機能追加用メモ" placeholder="追加したい機能や改善のアイデアを書いておけます" value={value} onChange={e => { setValue(e.target.value); onDraft(e.target.value); }} onBlur={onFlush} /></section>;
@@ -99,6 +117,7 @@ export default function App() {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [copyNotice, setCopyNotice] = useState(''), [manualCopy, setManualCopy] = useState<string | null>(null), [copyBusy, setCopyBusy] = useState(false);
   const copyLock = useRef(false);
+  const [clearing, setClearing] = useState<Entry[] | null>(null);
   const init = async () => {
     setLoadError(false); setStorageError('');
     try {
@@ -147,6 +166,14 @@ export default function App() {
       else setManualCopy(text);
     } finally { copyLock.current = false; setCopyBusy(false); }
   };
+  const startClear = () => {
+    if (!selected || manager || !saver.data) return;
+    flush();
+    const entries = saver.data.days[selected]?.entries ?? [];
+    setMenu(false); setCopyNotice('');
+    if (!entries.length) { setCopyNotice('削除する予定がありません'); return; }
+    setEditor(null); setClearing(entries);
+  };
   const day = data && selected ? data.days[selected] ?? emptyDay() : emptyDay();
   const today = dateKey(now), selectedDate = selected ? parseDate(selected) : null;
   const active = selected ? currentTimelineRow(selected, day.entries, now) : undefined;
@@ -180,7 +207,10 @@ export default function App() {
       if (editor.mode !== 'edit') return;
       await commitTimeChange(removeEntry(saver.data!, selected, editor.entry.id));
     }} />}
-    {menu && <Modal title={manualCopy !== null ? 'AI確認用コピー' : 'メニュー'} busy={copyBusy} onClose={() => setMenu(false)}>{manualCopy !== null ? <ManualCopy text={manualCopy} /> : <nav className="menu-items"><button disabled={copyBusy} onClick={() => { setManager('titles'); setMenu(false); setEditor(null); }}>予定タイトル一覧<Icon name="right" /></button><button disabled={copyBusy} onClick={() => { setManager('data'); setMenu(false); setEditor(null); }}>データ管理<Icon name="right" /></button>{selected && !manager && <button disabled={copyBusy} onClick={event => { void copyForAi(event.currentTarget.closest('section')!); }}>AI確認用コピー<Icon name="right" /></button>}<button disabled={copyBusy} onClick={() => { setManager('memo'); setMenu(false); setEditor(null); }}>機能追加用メモ<Icon name="right" /></button></nav>}</Modal>}
+    {clearing && data && selected && <ClearDayConfirm date={selected} entries={clearing} now={now} onCancel={() => setClearing(null)} onConfirm={async () => {
+      await commitTimeChange(clearEntries(saver.data!, selected)); setClearing(null);
+    }} />}
+    {menu && <Modal title={manualCopy !== null ? 'AI確認用コピー' : 'メニュー'} busy={copyBusy} onClose={() => setMenu(false)}>{manualCopy !== null ? <ManualCopy text={manualCopy} /> : <nav className="menu-items"><button disabled={copyBusy} onClick={() => { setManager('titles'); setMenu(false); setEditor(null); }}>予定タイトル一覧<Icon name="right" /></button><button disabled={copyBusy} onClick={() => { setManager('data'); setMenu(false); setEditor(null); }}>データ管理<Icon name="right" /></button>{selected && !manager && <button disabled={copyBusy} onClick={event => { void copyForAi(event.currentTarget.closest('section')!); }}>AI確認用コピー<Icon name="right" /></button>}{selected && !manager && <button className="danger" disabled={copyBusy} onClick={startClear}>この日の予定を全削除<Icon name="right" /></button>}<button disabled={copyBusy} onClick={() => { setManager('memo'); setMenu(false); setEditor(null); }}>機能追加用メモ<Icon name="right" /></button></nav>}</Modal>}
     {copyNotice && <div className="copy-notice" role="status">{copyNotice}</div>}
   </main>;
 }

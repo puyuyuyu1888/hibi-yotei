@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { absoluteTime, activeOptions, calendarDays, displayTitle, initialData, normalizeTime, orderOptions, removeEntry, removeOption, saveEntry, saveOption, setDay, setElapsedTitle, sortedEntries, tenDayDates, validDate, type Entry } from './model';
+import { absoluteTime, activeOptions, calendarDays, clearEntries, displayTitle, initialData, normalizeTime, orderOptions, removeEntry, removeOption, saveEntry, saveOption, setDay, setElapsedTitle, sortedEntries, tenDayDates, validDate, type Entry } from './model';
 const entry = (id: string, time: string, nextDay = false): Entry => ({ id, time, nextDay, freeTitle: '', titleId: 'title-0', elapsedTitle: '' });
 describe('時刻・タイトルと自動配置', () => {
   it('自由入力・選択・両方を別々に保存し、空白を挿入しない', () => {
@@ -43,4 +43,19 @@ it('分割・統合・時刻編集で開始IDに経過時間タイトルを保�
 it('月曜始まりとローカル10日間、実在する日付を扱う', () => {
   expect(calendarDays(2026,10)[0].getDay()).toBe(1); expect(tenDayDates(new Date(2026,11,28))).toHaveLength(10);
   expect(validDate('2024-02-29')).toBe(true); expect(validDate('2026-02-29')).toBe(false); expect(validDate('2026-13-01')).toBe(false);
+});
+describe('その日の時刻の全削除', () => {
+  it('時刻・翌日指定・経過時間タイトルだけを消し、日付タイトル・メモ・他の日・候補・機能追加用メモは変えない', () => {
+    let data = initialData();
+    data = saveEntry(data, '2026-11-22', { ...entry('a', '08:00'), elapsedTitle: '準備' });
+    data = saveEntry(data, '2026-11-22', { ...entry('b', '01:00', true), freeTitle: '深夜' });
+    data = setDay(data, '2026-11-22', { title: '日付タイトル', memo: 'メモ\n2行目' });
+    data = saveEntry(data, '2026-11-23', entry('c', '09:00'));
+    data = { ...data, featureMemo: '改善案' };
+    const before = JSON.stringify(data), cleared = clearEntries(data, '2026-11-22');
+    expect(cleared.days['2026-11-22']).toEqual({ title: '日付タイトル', memo: 'メモ\n2行目', entries: [] });
+    expect(cleared.days['2026-11-23']).toBe(data.days['2026-11-23']);
+    expect(cleared.titles).toBe(data.titles); expect(cleared.featureMemo).toBe('改善案'); expect(cleared.version).toBe(2);
+    expect(JSON.stringify(data)).toBe(before);
+  });
 });
