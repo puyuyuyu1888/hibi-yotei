@@ -272,4 +272,14 @@ test('「メモ」は保存済みの全体メモをそのまま表示し、日�
   await manage(page,'メモ');await expect(page.getByRole('textbox',{name:'全体メモ',exact:true})).toHaveValue('保存済みの\n  全体メモ');await expect(page.getByRole('textbox',{name:'メモ',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'管理画面を閉じる'}).click();await day(page);await expect(page.getByRole('textbox',{name:'メモ',exact:true})).toHaveValue(data.days[today].memo);await expect(page.getByRole('textbox',{name:'全体メモ',exact:true})).toHaveCount(0);
   expect(await stored(page)).toEqual(data);
+});test('ページ全体の下スワイプで再読み込みしないよう html と body の overscroll-behavior-y を none にし、画面内の縦スクロールと月のスワイプは今までどおり',async({page})=>{
+  const overscroll=()=>page.evaluate(()=>[getComputedStyle(document.documentElement).overscrollBehaviorY,getComputedStyle(document.body).overscrollBehaviorY]);
+  expect(await overscroll()).toEqual(['none','none']);
+  await swipe(page,0,200);await monthIs(page,2026,11);await swipe(page,-120);await monthIs(page,2026,12);await page.getByRole('button',{name:'今月',exact:true}).click();
+  for(const width of [320,390,412]){await page.setViewportSize({width,height:740});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+  await page.setViewportSize({width:320,height:740});
+  await page.getByRole('button',{name:'予定一覧',exact:true}).click();const list=page.locator('.date-scroll');const top=await list.evaluate(el=>el.scrollTop);await list.hover();await page.mouse.wheel(0,400);await expect.poll(()=>list.evaluate(el=>el.scrollTop)).toBeGreaterThan(top);expect(await overscroll()).toEqual(['none','none']);
+  await page.getByRole('button',{name:'カレンダーに戻る'}).click();await day(page);const memo=page.getByLabel('メモ',{exact:true});await memo.fill('行\n'.repeat(80));await memo.hover();await page.mouse.wheel(0,300);await expect.poll(()=>memo.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+  await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('dialog',{name:'メニュー',exact:true})).toBeVisible();expect(await overscroll()).toEqual(['none','none']);await page.getByRole('button',{name:'閉じる',exact:true}).click();
+  await manage(page,'メモ');expect(await overscroll()).toEqual(['none','none']);
 });
