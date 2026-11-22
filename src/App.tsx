@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { activeOptions, calendarDays, clearEntries, createId, dateKey, displayTitle, emptyDay, orderOptions, parseDate, removeEntry, removeOption, saveEntry, saveOption, setDay, setElapsedTitle, type Data, type Entry, type Option } from './model';
 import { loadData, openAppDatabase, persistData, replaceData, type AppDatabase } from './storage';
 import { Autosave, autosaveKey } from './autosave';
@@ -103,7 +103,7 @@ function ClearDayConfirm({ date, entries, now, onConfirm, onCancel }: { date: st
 }
 function FeatureMemo({ initial, onDraft, onFlush }: { initial: string; onDraft: (value: string) => void; onFlush: () => void }) {
   const [value, setValue] = useState(initial);
-  return <section className="feature-memo" aria-label="機能追加用メモ"><textarea className="feature-memo-text" aria-label="機能追加用メモ" placeholder="追加したい機能や改善のアイデアを書いておけます" value={value} onChange={e => { setValue(e.target.value); onDraft(e.target.value); }} onBlur={onFlush} /></section>;
+  return <section className="feature-memo" aria-label="全体メモ"><textarea className="feature-memo-text" aria-label="全体メモ" value={value} onChange={e => { setValue(e.target.value); onDraft(e.target.value); }} onBlur={onFlush} /></section>;
 }
 export default function App() {
   const [data, setData] = useState<Data | null>(null), [storageError, setStorageError] = useState(''), [storageNotice, setStorageNotice] = useState(''), [loadError, setLoadError] = useState(false);
@@ -174,21 +174,64 @@ export default function App() {
     if (!entries.length) { setCopyNotice('削除する予定がありません'); return; }
     setEditor(null); setClearing(entries);
   };
+  const openMenu = () => { flush(); setManualCopy(null); setCopyNotice(''); setMenu(true); };
+  const calendarScreen = !selected && !manager && view === 'calendar';
+  // 月の切り替え（スワイプ・ドラッグ・← →キー）。slide はアニメーションの向き。
+  const [slide, setSlide] = useState<'' | 'next' | 'prev'>('');
+  const swipe = useRef<{ id: number; x: number; y: number } | null>(null), swipedAt = useRef(-Infinity);
+  const shiftMonth = (delta: number) => {
+    setSlide(delta > 0 ? 'next' : 'prev');
+    setMonth(old => { const d = new Date(old.year, old.month + delta, 1); return { year: d.getFullYear(), month: d.getMonth() }; });
+  };
+  useEffect(() => {
+    if (!data || !calendarScreen || menu) return;
+    const keydown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || document.querySelector('dialog[open]')) return;
+      if ((e.target as Element | null)?.closest?.('input,textarea,select,[contenteditable]')) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); shiftMonth(-1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); shiftMonth(1); }
+    };
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  }, [data, calendarScreen, menu]);
+  const swipeHandlers = {
+    onPointerDown: (e: ReactPointerEvent) => {
+      const edge = 24; swipedAt.current = -Infinity;
+      // 画面の左右の端から始めた操作は Android の「戻る」と競合するため扱わない。
+      swipe.current = !e.isPrimary || e.button !== 0 || e.clientX < edge || e.clientX > window.innerWidth - edge ? null : { id: e.pointerId, x: e.clientX, y: e.clientY };
+    },
+    onPointerUp: (e: ReactPointerEvent) => {
+      const start = swipe.current; swipe.current = null;
+      if (!start || start.id !== e.pointerId) return;
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (Math.abs(dx) >= 50 && Math.abs(dx) >= 1.5 * Math.abs(dy)) { swipedAt.current = e.timeStamp; shiftMonth(dx < 0 ? 1 : -1); }
+    },
+    onPointerCancel: () => { swipe.current = null; },
+    // スワイプ直後のクリックでは日付を開かない。
+    onClickCapture: (e: ReactMouseEvent) => { if (e.timeStamp - swipedAt.current < 600) { e.preventDefault(); e.stopPropagation(); } swipedAt.current = -Infinity; },
+  };
+  // 日付のマスは作り直さず（触れている要素を消さないため）、アニメーションだけをやり直す。
+  const gridRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const grid = gridRef.current; if (!grid) return;
+    grid.classList.remove('slide-next', 'slide-prev');
+    if (slide) { void grid.offsetWidth; grid.classList.add(`slide-${slide}`); }
+  }, [month, slide]);
   const day = data && selected ? data.days[selected] ?? emptyDay() : emptyDay();
   const today = dateKey(now), selectedDate = selected ? parseDate(selected) : null;
   const active = selected ? currentTimelineRow(selected, day.entries, now) : undefined;
-  const headerTitle = manager ? manager === 'data' ? 'データ管理' : manager === 'memo' ? '機能追加用メモ' : '予定タイトル一覧' : selectedDate ? `${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日` : view === 'ten-days' ? '予定一覧' : '日々の予定';
-  return <main className="app-shell">
-    <header className="app-header">
+  const headerTitle = manager ? manager === 'data' ? 'データ管理' : manager === 'memo' ? 'メモ' : '予定タイトル一覧' : selectedDate ? `${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日` : view === 'ten-days' ? '予定一覧' : '日々の予定';
+  return <main className={`app-shell${calendarScreen ? ' no-header' : ''}`}>
+    {!calendarScreen && <header className="app-header">
       {(selected || manager || view === 'ten-days') ? <button className="icon-button back-button" aria-label={manager ? '管理画面を閉じる' : selected && view === 'ten-days' ? '予定一覧に戻る' : 'カレンダーに戻る'} disabled={busy} onClick={back}><Icon name="back" /></button> : <span className="brand-mark" aria-hidden="true">日</span>}
       <div className="header-title"><h1>{headerTitle}</h1>{selectedDate && !manager && <span className={`date-weekday weekday-${(selectedDate.getDay() + 6) % 7}`}>{['日', '月', '火', '水', '木', '金', '土'][selectedDate.getDay()]}曜日{selected === today ? ' ・ 今日' : ''}</span>}</div>
-      <button className="icon-button" aria-label="メニュー" disabled={busy} onClick={() => { flush(); setManualCopy(null); setCopyNotice(''); setMenu(true); }}><Icon name="menu" /></button>
-    </header>
+      <button className="icon-button" aria-label="メニュー" disabled={busy} onClick={openMenu}><Icon name="menu" /></button>
+    </header>}
     {storageNotice && <div className="storage-error" role="alert">{storageNotice}</div>}
     {storageError && <div className="storage-error" role="alert"><span>{storageError}</span><button disabled={busy} onClick={() => loadError ? void init() : flush()}>再試行</button></div>}
     {!data ? <div className="loading" role="status">{loadError ? '読み込みエラー' : '読み込み中…'}</div> : manager === 'data' ? <DataManager getData={() => saver.data!} onImport={importData} onBusyChange={setBusy} /> : manager === 'memo' ? <FeatureMemo initial={data.featureMemo ?? ''} onDraft={featureMemo => textUpdate({ ...saver.data!, featureMemo })} onFlush={flush} /> : manager ? <Manager data={data} update={update} /> : !selected && view === 'ten-days' ? <TenDayList data={data} today={now} position={listPosition} onSelect={selectDate} /> : !selected ? <section className="calendar" aria-label="月間カレンダー">
-      <div className="month-navigation"><div><span className="year-label">{month.year}</span><h2>{month.month + 1}<span>月</span></h2></div><div className="month-controls"><button className="today-button" onClick={() => { listPosition.current = null; setView('ten-days'); }}>予定一覧</button><button className="today-button" onClick={() => setMonth({ year: now.getFullYear(), month: now.getMonth() })}>今月</button><button className="icon-button" aria-label="前月" onClick={() => { const d = new Date(month.year, month.month - 1, 1); setMonth({ year: d.getFullYear(), month: d.getMonth() }); }}><Icon name="left" /></button><button className="icon-button" aria-label="翌月" onClick={() => { const d = new Date(month.year, month.month + 1, 1); setMonth({ year: d.getFullYear(), month: d.getMonth() }); }}><Icon name="right" /></button></div></div>
-      <div className="weekday-grid">{weekdays.map((w, i) => <span key={w} className={`weekday-${i}`}>{w}</span>)}</div><div className="calendar-grid">{calendarDays(month.year, month.month).map(date => { const key = dateKey(date), has = !!data.days[key]?.entries.length || !!data.days[key]?.title.trim(); return <button key={key} className={`calendar-day weekday-${(date.getDay() + 6) % 7} ${date.getMonth() !== month.month ? 'outside-month' : ''} ${key === today ? 'is-today' : ''}`} aria-label={`${key}${key === today ? ' 今日' : ''}${has ? ' 予定あり' : ''}`} onClick={() => selectDate(key)}><span className="day-number">{date.getDate()}</span><span className={`event-dot ${has ? 'visible' : ''}`} aria-hidden="true" /></button>; })}</div>
+      <div className="month-navigation"><div><span className="year-label">{month.year}</span><h2>{month.month + 1}<span>月</span></h2></div><div className="month-controls"><button className="today-button" onClick={() => { listPosition.current = null; setView('ten-days'); }}>予定一覧</button><button className="today-button" onClick={() => { setSlide(''); setMonth({ year: now.getFullYear(), month: now.getMonth() }); }}>今月</button><button className="icon-button" aria-label="メニュー" disabled={busy} onClick={openMenu}><Icon name="menu" /></button></div></div>
+      <div className="calendar-swipe" {...swipeHandlers}><div className="weekday-grid">{weekdays.map((w, i) => <span key={w} className={`weekday-${i}`}>{w}</span>)}</div><div ref={gridRef} className="calendar-grid">{calendarDays(month.year, month.month).map((date, index) => { const key = dateKey(date), has = !!data.days[key]?.entries.length || !!data.days[key]?.title.trim(); return <button key={index} className={`calendar-day weekday-${(date.getDay() + 6) % 7} ${date.getMonth() !== month.month ? 'outside-month' : ''} ${key === today ? 'is-today' : ''}`} aria-label={`${key}${key === today ? ' 今日' : ''}${has ? ' 予定あり' : ''}`} onClick={() => selectDate(key)}><span className="day-number">{date.getDate()}</span><span className={`event-dot ${has ? 'visible' : ''}`} aria-hidden="true" /></button>; })}</div></div>
     </section> : <section className="day-detail" aria-label="日別予定">
       <div className="day-meta"><DayTitle key={selected} initial={day.title} onChange={title => textUpdate(setDay(saver.data!, selected, { title }))} onFlush={flush} /><button className="icon-button add-time" aria-label="時刻を追加" onClick={() => { flush(); setEditor({ mode: 'new', entry: { id: createId(), time: '', nextDay: false, freeTitle: '', titleId: null, elapsedTitle: '' } }); }}>＋</button></div>
       <div className="schedule-area">
@@ -210,7 +253,7 @@ export default function App() {
     {clearing && data && selected && <ClearDayConfirm date={selected} entries={clearing} now={now} onCancel={() => setClearing(null)} onConfirm={async () => {
       await commitTimeChange(clearEntries(saver.data!, selected)); setClearing(null);
     }} />}
-    {menu && <Modal title={manualCopy !== null ? 'AI確認用コピー' : 'メニュー'} busy={copyBusy} onClose={() => setMenu(false)}>{manualCopy !== null ? <ManualCopy text={manualCopy} /> : <nav className="menu-items"><button disabled={copyBusy} onClick={() => { setManager('titles'); setMenu(false); setEditor(null); }}>予定タイトル一覧<Icon name="right" /></button><button disabled={copyBusy} onClick={() => { setManager('data'); setMenu(false); setEditor(null); }}>データ管理<Icon name="right" /></button>{selected && !manager && <button disabled={copyBusy} onClick={event => { void copyForAi(event.currentTarget.closest('section')!); }}>AI確認用コピー<Icon name="right" /></button>}{selected && !manager && <button className="danger" disabled={copyBusy} onClick={startClear}>この日の予定を全削除<Icon name="right" /></button>}<button disabled={copyBusy} onClick={() => { setManager('memo'); setMenu(false); setEditor(null); }}>機能追加用メモ<Icon name="right" /></button></nav>}</Modal>}
+    {menu && <Modal title={manualCopy !== null ? 'AI確認用コピー' : 'メニュー'} busy={copyBusy} onClose={() => setMenu(false)}>{manualCopy !== null ? <ManualCopy text={manualCopy} /> : <nav className="menu-items"><button disabled={copyBusy} onClick={() => { setManager('titles'); setMenu(false); setEditor(null); }}>予定タイトル一覧<Icon name="right" /></button><button disabled={copyBusy} onClick={() => { setManager('data'); setMenu(false); setEditor(null); }}>データ管理<Icon name="right" /></button>{selected && !manager && <button disabled={copyBusy} onClick={event => { void copyForAi(event.currentTarget.closest('section')!); }}>AI確認用コピー<Icon name="right" /></button>}{selected && !manager && <button className="danger" disabled={copyBusy} onClick={startClear}>この日の予定を全削除<Icon name="right" /></button>}<button disabled={copyBusy} onClick={() => { setManager('memo'); setMenu(false); setEditor(null); }}>メモ<Icon name="right" /></button></nav>}</Modal>}
     {copyNotice && <div className="copy-notice" role="status">{copyNotice}</div>}
   </main>;
 }

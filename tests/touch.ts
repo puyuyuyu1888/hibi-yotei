@@ -16,6 +16,14 @@ export function fixture():Data{
 }
 export async function stored(page:Page,replacement?:Data){return page.evaluate(async replacement=>{const request=indexedDB.open(`hibi-timeline-v2:file:${location.pathname}`,1);const db=await new Promise<IDBDatabase>((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});try{return await new Promise<Data>((resolve,reject)=>{const tx=db.transaction('app',replacement?'readwrite':'readonly'),store=tx.objectStore('app');if(replacement)store.put(replacement,'data');const read=store.get('data');tx.oncomplete=()=>resolve(read.result);tx.onabort=()=>reject(tx.error);});}finally{db.close();}},replacement);}
 export async function exported(page:Page,file:string){const download=page.waitForEvent('download');await page.getByRole('button',{name:'エクスポート',exact:true}).click();const result=await download;expect(result.suggestedFilename()).toMatch(/^schedule-backup-\d{8}-\d{4}\.json$/);await result.saveAs(file);return JSON.parse(await readFile(file,'utf8'));}
+// カレンダー上でタッチのスワイプを行う（dx>0 は右へ＝前月、dx<0 は左へ＝翌月）。startX を省くとカレンダー中央から始める。
+export async function swipe(page:Page,dx:number,dy=0,startX?:number){
+  const box=(await page.locator('.calendar-grid').boundingBox())!,x=startX??box.x+box.width/2,y=box.y+box.height/2,session=await page.context().newCDPSession(page);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});for(let i=1;i<=6;i++)await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*i/6,y:y+dy*i/6}]});
+  // 指を止めてから離す（慣性スクロールを起こさず、次のタップが止める操作として扱われないようにする）。
+  for(let i=0;i<3;i++){await page.waitForTimeout(40);await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx,y:y+dy}]});}
+  await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await session.detach();
+}
 export async function drag(page:Page,from:number,to:number){
   const handles=page.getByRole('button',{name:/を並べ替え$/}),a=(await handles.nth(from).boundingBox())!,b=(await handles.nth(to).boundingBox())!,session=await page.context().newCDPSession(page),x=a.x+20,startY=a.y+20,endY=b.y+20;
   await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y:startY}]});for(let i=1;i<=8;i++)await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:startY+(endY-startY)*i/8}]});await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await session.detach();

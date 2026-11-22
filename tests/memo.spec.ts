@@ -22,11 +22,11 @@ test('現在表示は時刻と区間を区別し、翌日の予定には干渉�
   await page.clock.setSystemTime(new Date('2026-11-06T23:30:00+09:00'));await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await expect(page.getByLabel('現在の予定').locator('..')).toHaveClass(/elapsed-row/);
   await page.getByRole('button',{name:'カレンダーに戻る'}).click();await day(page,'2026-11-07');await expect(page.locator('.time-row,.elapsed-row')).toHaveCount(0);await expect(page.getByLabel('現在の予定')).toHaveCount(0);
 });
-test('機能追加用メモをメニューから開き、自動保存し、再読み込み後も復元する',async({page})=>{
-  await open(page);await stored(page,fixture());await page.reload();await manage(page,'機能追加用メモ');
-  await expect(page.locator('h1')).toHaveText('機能追加用メモ');const memo=page.getByRole('textbox',{name:'機能追加用メモ'});await expect(memo).toHaveValue('');
+test('全体メモ（featureMemo）をメニューの「メモ」から開き、自動保存し、再読み込み後も復元する',async({page})=>{
+  await open(page);await stored(page,fixture());await page.reload();await manage(page,'メモ');
+  await expect(page.locator('h1')).toHaveText('メモ');const memo=page.getByRole('textbox',{name:'全体メモ',exact:true});await expect(memo).toHaveValue('');expect(await memo.getAttribute('placeholder')).toBeNull();
   await memo.fill('改善案\n  2行目');await page.clock.runFor(600);expect((await stored(page)).featureMemo).toBe('改善案\n  2行目');
   await page.getByRole('button',{name:'管理画面を閉じる'}).click();await expect(page.getByRole('region',{name:'月間カレンダー'})).toBeVisible();
-  await page.reload();await manage(page,'機能追加用メモ');await expect(memo).toHaveValue('改善案\n  2行目');
+  await page.reload();await manage(page,'メモ');await expect(memo).toHaveValue('改善案\n  2行目');
   const after=await stored(page);const {featureMemo,...rest}=after;expect(rest).toEqual(fixture());
 });

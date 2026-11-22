@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { dateKey, parseDate } from '../src/model';
-import { fixture, open, stored, today } from './touch';
+import { fixture, open, stored, swipe, today } from './touch';
 
 async function anchor(page: Page) {
   return page.locator('.date-scroll').evaluate(el => {
@@ -22,7 +22,7 @@ test('今日が初期位置・既存の固定列と省略表示・日付タイ�
   await stored(page, data); await page.reload();
   await expect(page.getByRole('button', { name: /^2026-11-06/ })).toHaveAccessibleName(/予定あり/);
   await expect(page.locator('.weekday-grid')).toHaveText('月火水木金土日');
-  await page.getByRole('button', { name: '前月' }).click(); await expect(page.locator('.month-navigation h2')).toContainText('10');
+  await swipe(page, 120); await expect(page.locator('.month-navigation h2')).toContainText('10');
   await page.getByRole('button', { name: '今月' }).click();
   await page.getByRole('button', { name: '予定一覧', exact: true }).click();
   expect((await anchor(page)).date).toBe(today); expect((await anchor(page)).offset).toBe(0);

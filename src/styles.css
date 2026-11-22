@@ -14,6 +14,8 @@
 .ten-day-row.is-today{background:#eaf0e6}.ten-day-row.is-today .ten-day-heading{grid-template-columns:minmax(8.5em,auto) minmax(0,1fr)}.ten-day-row.is-today .ten-day-date{color:var(--green)!important;font-weight:700}.today-badge{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:var(--green);color:#fff;font-size:11px;font-weight:700;line-height:16px;vertical-align:1px}
 @media(max-width:350px){.app-header{padding-left:14px;padding-right:10px;gap:7px}h1{font-size:19px}.day-detail,.manager{padding-left:14px;padding-right:14px}.calendar{padding-left:8px;padding-right:8px}.calendar-day{height:62px}.modal>section{padding:14px}.month-navigation{padding-left:6px;padding-right:0}.month-controls{gap:0}.today-button{margin-right:1px;padding:0 11px}}
 @media(prefers-reduced-motion:no-preference){button{transition:background-color .12s ease}}
+.app-shell.no-header{padding-top:env(safe-area-inset-top)}.calendar-swipe{touch-action:pan-y;user-select:none;-webkit-user-select:none;overflow:clip;overflow-clip-margin:8px}
+@media(prefers-reduced-motion:no-preference){.slide-next{animation:slide-next .2s ease-out}.slide-prev{animation:slide-prev .2s ease-out}@keyframes slide-next{from{transform:translateX(32px);opacity:.3}}@keyframes slide-prev{from{transform:translateX(-32px);opacity:.3}}}
 .date-scroll{overflow-y:auto;overflow-anchor:none;overscroll-behavior-y:contain;scrollbar-width:none}.date-scroll::-webkit-scrollbar{display:none}
 .elapsed-content input:focus-visible{outline-offset:-2px}
 .time-modal .entry-editor{background:transparent;border:0;padding:0;margin:0}

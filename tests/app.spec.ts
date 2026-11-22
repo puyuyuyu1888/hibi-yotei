@@ -1,5 +1,5 @@
 import { test,expect,type Page } from '@playwright/test';
-import { add,day,drag,exported,fixture,manage,open,stored,today } from './touch';
+import { add,day,drag,exported,fixture,manage,open,stored,swipe,today } from './touch';
 test.beforeEach(async({page})=>open(page));
 test('2行の時刻入力と自由入力＋選択、自動整列、交互の経過時間行、320/390px表示',async({page})=>{
   await day(page);await add(page,'10:00','作業開始');await add(page,'08:00','起床');
@@ -178,17 +178,17 @@ test('カレンダーの点は時刻または空白以外の日付タイトル�
   expect(await stored(page)).toEqual(saved);
 });
 
-const menuOrder=['予定タイトル一覧','データ管理','AI確認用コピー','この日の予定を全削除','機能追加用メモ'];
+const menuOrder=['予定タイトル一覧','データ管理','AI確認用コピー','この日の予定を全削除','メモ'];
 const menuItems=(page:Page)=>page.locator('.menu-items button').allTextContents();
 test('全削除は日別画面のメニューだけに赤字で表示し、時刻がない日は「削除する予定がありません」と表示する',async({page})=>{
-  await page.getByRole('button',{name:'メニュー',exact:true}).click();expect(await menuItems(page)).toEqual(['予定タイトル一覧','データ管理','機能追加用メモ']);await page.getByRole('button',{name:'閉じる',exact:true}).click();
+  await page.getByRole('button',{name:'メニュー',exact:true}).click();expect(await menuItems(page)).toEqual(['予定タイトル一覧','データ管理','メモ']);await page.getByRole('button',{name:'閉じる',exact:true}).click();
   await page.getByRole('button',{name:'予定一覧',exact:true}).click();await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('button',{name:'この日の予定を全削除'})).toHaveCount(0);await page.getByRole('button',{name:'閉じる',exact:true}).click();
   await page.getByRole('button',{name:/11月7日/}).click();await page.getByLabel('日付タイトル').fill('タイトルだけ');await page.getByLabel('メモ').fill('メモだけ');await page.getByRole('button',{name:'メニュー',exact:true}).click();
   expect(await menuItems(page)).toEqual(menuOrder);
   const button=page.getByRole('button',{name:'この日の予定を全削除',exact:true});expect(await button.evaluate(el=>getComputedStyle(el).color)).toBe('rgb(170, 81, 74)');
   const before=await stored(page);await button.click();
   await expect(page.getByRole('status')).toHaveText('削除する予定がありません');await expect(page.locator('dialog[open]')).toHaveCount(0);expect(await stored(page)).toEqual(before);
-  await page.getByRole('button',{name:'メニュー',exact:true}).click();await page.getByRole('button',{name:'機能追加用メモ',exact:true}).click();await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('button',{name:'この日の予定を全削除'})).toHaveCount(0);
+  await page.getByRole('button',{name:'メニュー',exact:true}).click();await page.getByRole('button',{name:'メモ',exact:true}).click();await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('button',{name:'この日の予定を全削除'})).toHaveCount(0);
 });
 
 test('全削除は確認画面で件数を示し、キャンセルでは消さず、保存失敗時は残し、削除後は再起動しても空のまま',async({browser},info)=>{
@@ -215,7 +215,7 @@ test('全削除は確認画面で件数を示し、キャンセルでは消さ�
 
 test('全削除の確認画面は年が違う日に年を付け、経過時間タイトル0件は表示せず、320/390/412pxで崩れない',async({page})=>{
   const data=fixture();data.days['2025-11-06']={title:'',memo:'',entries:[{id:'old',time:'08:00',nextDay:false,freeTitle:'去年の予定',titleId:null,elapsedTitle:''}]};await stored(page,data);await page.reload();
-  for(let i=0;i<12;i++)await page.getByRole('button',{name:'前月',exact:true}).click();
+  for(let i=0;i<12;i++)await swipe(page,120);await expect(page.locator('.month-navigation')).toContainText('2025');
   await day(page,'2025-11-06');
   for(const width of [320,390,412]){
     await page.setViewportSize({width,height:740});
@@ -228,5 +228,48 @@ test('全削除の確認画面は年が違う日に年を付け、経過時間�
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await dialog.getByRole('button',{name:'キャンセル',exact:true}).click();
   }
+  expect(await stored(page)).toEqual(data);
+});
+
+const monthIs=async(page:Page,year:number,month:number)=>{await expect(page.locator('.year-label')).toHaveText(String(year));await expect(page.locator('.month-navigation h2')).toHaveText(`${month}月`);};
+test('カレンダー画面だけヘッダーを表示せず、メニューボタンは「今月」の右にあり、320/390/412pxで崩れない',async({page})=>{
+  await expect(page.locator('.app-header')).toHaveCount(0);await expect(page.locator('h1')).toHaveCount(0);await expect(page.getByRole('button',{name:'前月'})).toHaveCount(0);await expect(page.getByRole('button',{name:'翌月'})).toHaveCount(0);
+  const controls=page.locator('.month-controls button');expect(await controls.evaluateAll(list=>list.map(b=>b.getAttribute('aria-label')??b.textContent))).toEqual(['予定一覧','今月','メニュー']);
+  for(const width of [320,390,412]){
+    await page.setViewportSize({width,height:740});
+    const layout=await page.evaluate(()=>{const r=(s:string)=>document.querySelector(s)!.getBoundingClientRect(),label=r('.month-navigation>div:first-child'),today=[...document.querySelectorAll('.month-controls button')].map(b=>b.getBoundingClientRect()),menu=today[2];return{overlap:label.right>today[0].left,order:today[0].right<=today[1].left&&today[1].right<=menu.left,menu:[menu.width,menu.height],sameRow:Math.abs((today[1].top+today[1].height/2)-(menu.top+menu.height/2))<1,inside:menu.right<=innerWidth,scroll:document.documentElement.scrollWidth<=innerWidth};});
+    expect(layout).toEqual({overlap:false,order:true,menu:[44,44],sameRow:true,inside:true,scroll:true});
+  }
+  await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('dialog',{name:'メニュー',exact:true})).toBeVisible();expect(await page.locator('.menu-items button').allTextContents()).toEqual(['予定タイトル一覧','データ管理','メモ']);await page.getByRole('button',{name:'閉じる',exact:true}).click();
+  await page.getByRole('button',{name:'予定一覧',exact:true}).click();await expect(page.locator('.app-header')).toHaveCount(1);await expect(page.locator('h1')).toHaveText('予定一覧');await page.getByRole('button',{name:'カレンダーに戻る'}).click();await expect(page.locator('.app-header')).toHaveCount(0);
+  await day(page);await expect(page.locator('h1')).toHaveText('11月6日');await expect(page.locator('.app-header').getByRole('button',{name:'メニュー',exact:true})).toBeVisible();
+  await manage(page,'予定タイトル一覧');await expect(page.locator('h1')).toHaveText('予定タイトル一覧');await page.getByRole('button',{name:'管理画面を閉じる'}).click();
+  await page.getByRole('button',{name:'カレンダーに戻る'}).click();await manage(page,'メモ');await expect(page.locator('h1')).toHaveText('メモ');await expect(page.locator('.app-header')).toHaveCount(1);
+});
+test('左右のスワイプで月を切り替え、縦・短い動き・画面端からでは切り替えず、スワイプ後は日付を開かない',async({page})=>{
+  await monthIs(page,2026,11);
+  await swipe(page,-120);await monthIs(page,2026,12);await expect(page.getByRole('region',{name:'日別予定'})).toHaveCount(0);
+  await swipe(page,120);await swipe(page,120);await monthIs(page,2026,10);
+  await swipe(page,120);await swipe(page,120);await monthIs(page,2026,8);await page.getByRole('button',{name:'今月',exact:true}).click();await monthIs(page,2026,11);
+  await swipe(page,0,-160);await swipe(page,60,120);await swipe(page,-40);await monthIs(page,2026,11);
+  await swipe(page,120,0,12);await swipe(page,-120,0,300);await monthIs(page,2026,11);
+  await expect(page.getByRole('region',{name:'月間カレンダー'})).toBeVisible();await expect(page.getByRole('region',{name:'日別予定'})).toHaveCount(0);
+  await page.getByRole('button',{name:/^2026-11-12/}).tap();await expect(page.getByRole('region',{name:'日別予定'})).toBeVisible();await expect(page.locator('h1')).toHaveText('11月12日');
+});
+test('← →キーとマウスのドラッグでも月を切り替え、切り替え時は横にスライドする（動きを減らす設定では動かさない）',async({page})=>{
+  await page.keyboard.press('ArrowRight');await monthIs(page,2026,12);await expect(page.locator('.calendar-grid')).toHaveClass(/slide-next/);
+  await page.keyboard.press('ArrowLeft');await page.keyboard.press('ArrowLeft');await monthIs(page,2026,10);await expect(page.locator('.calendar-grid')).toHaveClass(/slide-prev/);
+  expect(await page.locator('.calendar-grid').evaluate(el=>getComputedStyle(el).animationName)).toBe('slide-prev');
+  const box=(await page.locator('.calendar-grid').boundingBox())!,y=box.y+box.height/2;
+  await page.mouse.move(box.x+box.width-40,y);await page.mouse.down();await page.mouse.move(box.x+box.width/2,y,{steps:5});await page.mouse.move(box.x+40,y,{steps:5});await page.mouse.up();
+  await monthIs(page,2026,11);await expect(page.getByRole('region',{name:'日別予定'})).toHaveCount(0);
+  await page.emulateMedia({reducedMotion:'reduce'});await page.keyboard.press('ArrowRight');await monthIs(page,2026,12);expect(await page.locator('.calendar-grid').evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
+  await page.getByRole('button',{name:'メニュー',exact:true}).click();await page.keyboard.press('ArrowRight');await monthIs(page,2026,12);await page.getByRole('button',{name:'閉じる',exact:true}).click();
+  await page.getByRole('button',{name:/^2026-12-01/}).click();await expect(page.locator('h1')).toHaveText('12月1日');
+});
+test('「メモ」は保存済みの全体メモをそのまま表示し、日別画面のメモ欄と名前で区別できる',async({page})=>{
+  const data=fixture();data.featureMemo='保存済みの\n  全体メモ';await stored(page,data);await page.reload();
+  await manage(page,'メモ');await expect(page.getByRole('textbox',{name:'全体メモ',exact:true})).toHaveValue('保存済みの\n  全体メモ');await expect(page.getByRole('textbox',{name:'メモ',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'管理画面を閉じる'}).click();await day(page);await expect(page.getByRole('textbox',{name:'メモ',exact:true})).toHaveValue(data.days[today].memo);await expect(page.getByRole('textbox',{name:'全体メモ',exact:true})).toHaveCount(0);
   expect(await stored(page)).toEqual(data);
 });
