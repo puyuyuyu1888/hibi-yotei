@@ -39,7 +39,7 @@ test('今日が初期位置・既存の固定列と省略表示・日付タイ�
         titleRight: title.getBoundingClientRect().right, rowRight: row.right, background: getComputedStyle(el).backgroundColor, dateColor: getComputedStyle(date).color, dateWeight: getComputedStyle(date).fontWeight };
     });
     // Today's row keeps the row geometry; the title starts after the 今日 badge and stays inside the row.
-    expect(layout).toMatchObject({ height: 65, top: 104, font: '14px', color: 'rgb(37, 60, 50)', background: 'rgb(234, 240, 230)', dateColor: 'rgb(51, 92, 75)', dateWeight: '700' });
+    expect(layout).toMatchObject({ height: 65, top: 104, font: '14px', color: 'rgb(232, 232, 232)', background: 'rgb(29, 43, 35)', dateColor: 'rgb(102, 187, 138)', dateWeight: '700' });
     expect(layout.titleX).toBe(129); expect(layout.titleRight).toBeLessThanOrEqual(layout.rowRight);
     expect(layout.dateY).toBe(layout.titleY);
   }

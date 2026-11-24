@@ -34,7 +34,7 @@ const page = (csp, extraHead = '') => `<!doctype html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#335c4b">
+  <meta name="theme-color" content="#121212">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,${Buffer.from(icon).toString('base64')}">${extraHead}
   <title>スケジュール</title>
@@ -59,7 +59,7 @@ const dist = path.join(root, 'dist');
 const icons = ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 const manifest = JSON.stringify({
   id: './', name: 'スケジュール', short_name: 'スケジュール', lang: 'ja', start_url: './', scope: './',
-  display: 'standalone', theme_color: '#335c4b', background_color: '#f7f8f4',
+  display: 'standalone', theme_color: '#121212', background_color: '#121212',
   icons: [
     { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
     { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

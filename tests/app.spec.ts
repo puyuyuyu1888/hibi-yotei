@@ -36,7 +36,7 @@ test('追加カードは背景・キャンセル・Escで下書きを破棄し�
   await expect(page.getByRole('button',{name:'＋ 時刻入力',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'時刻・画像を追加',exact:true}).click();await page.getByRole('button',{name:'時刻を追加'}).click();const card=page.getByRole('dialog',{name:'新規時刻入力'});
   await expect(card).toBeVisible();await expect(card.getByRole('button',{name:'削除',exact:true})).toHaveCount(0);await expect(page.locator('dialog[open]')).toHaveCount(1);await expect(page.locator('.day-detail')).toBeAttached();
-  expect(await card.evaluate(el=>getComputedStyle(el,'::backdrop').backgroundColor)).toBe('rgba(29, 50, 44, 0.44)');
+  expect(await card.evaluate(el=>getComputedStyle(el,'::backdrop').backgroundColor)).toBe('rgba(0, 0, 0, 0.7)');
   await page.getByLabel('時刻',{exact:true}).fill('08:00');await page.getByLabel('自由入力タイトル').fill('中断する');await page.getByRole('checkbox',{name:'翌日'}).check();
   await card.locator('.modal-header h2').click();await expect(card).toBeVisible();expect(await stored(page)).toEqual(original);
   await page.mouse.click(2,2);await expect(card).toHaveCount(0);expect(await stored(page)).toEqual(original);
@@ -127,7 +127,7 @@ test('経過時間入力の4辺の緑枠と寸法・長文編集・保存を維�
   const field=page.getByLabel('経過時間タイトル'),longTitle='長い経過時間タイトル'.repeat(30);
   for(const width of [320,390]){
     await page.setViewportSize({width,height:740});await page.locator('button.elapsed-content').tap();await expect(field).toBeFocused();
-    await expect(field).toHaveCSS('outline-color','rgb(74, 125, 97)');await expect(field).toHaveCSS('outline-width','2px');await expect(field).toHaveCSS('outline-style','solid');await expect(field).toHaveCSS('outline-offset','-2px');
+    await expect(field).toHaveCSS('outline-color','rgb(127, 209, 160)');await expect(field).toHaveCSS('outline-width','2px');await expect(field).toHaveCSS('outline-style','solid');await expect(field).toHaveCSS('outline-offset','-2px');
     const geometry=()=>field.evaluate(el=>{
       const parent=el.parentElement!,duration=parent.querySelector('.entry-duration')!;
       const box=(node:Element)=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};};
@@ -185,7 +185,7 @@ test('全削除は日別画面のメニューだけに赤字で表示し、時�
   await page.getByRole('button',{name:'予定一覧',exact:true}).click();await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('button',{name:'この日の予定を全削除'})).toHaveCount(0);await page.getByRole('button',{name:'閉じる',exact:true}).click();
   await page.getByRole('button',{name:/11月7日/}).click();await page.getByLabel('日付タイトル').fill('タイトルだけ');await page.getByLabel('メモ').fill('メモだけ');await page.getByRole('button',{name:'メニュー',exact:true}).click();
   expect(await menuItems(page)).toEqual(menuOrder);
-  const button=page.getByRole('button',{name:'この日の予定を全削除',exact:true});expect(await button.evaluate(el=>getComputedStyle(el).color)).toBe('rgb(170, 81, 74)');
+  const button=page.getByRole('button',{name:'この日の予定を全削除',exact:true});expect(await button.evaluate(el=>getComputedStyle(el).color)).toBe('rgb(239, 123, 114)');
   const before=await stored(page);await button.click();
   await expect(page.getByRole('status')).toHaveText('削除する予定がありません');await expect(page.locator('dialog[open]')).toHaveCount(0);expect(await stored(page)).toEqual(before);
   await manage(page,'予定タイトル一覧');await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('button',{name:'この日の予定を全削除'})).toHaveCount(0);await expect(page.getByRole('button',{name:/プリセット/})).toHaveCount(0);

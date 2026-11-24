@@ -114,7 +114,7 @@
 ### PWA版（ユーザーの明示的な指示により追加）
 - `dist/` に出力する（`index.html`・`manifest.webmanifest`・`sw.js`・PNGアイコン）。`dist/` はGitに含めない。
 - GitHub Pages で公開する。`main` ブランチへの push で、GitHub Actions（`.github/workflows/pages.yml`）が単体テスト・ビルド・公開を行う。
-- manifest：名前・短い名前「スケジュール」（`id` は `./` のまま変えない）、`display: standalone`、`theme_color: #335c4b`、`background_color: #f7f8f4`。アイコンは192px・512px・maskable 512px（`public/icon.svg` から `.\project.ps1 icons` で作り、`public/` に置く）。
+- manifest：名前・短い名前「スケジュール」（`id` は `./` のまま変えない）、`display: standalone`、`theme_color: #121212`、`background_color: #121212`（ダークの背景色に合わせ、起動時に白く光らないようにする。HTMLの `theme-color` も同じ色）。アイコンは192px・512px・maskable 512px（`public/icon.svg` から `.\project.ps1 icons` で作り、`public/` に置く）。
 - Service Worker（`src/sw.js`）：起動に必要なファイルをすべてキャッシュし、オフラインで起動できるようにする。新しい版は次回起動時に切り替わり、古い版のキャッシュ（`hibi-yotei-` で始まるもの）を削除する。入力中の画面を勝手に再読み込みしない。
 - CSPは単一HTML版に `manifest-src 'self'`・`worker-src 'self'`・`img-src 'self'` だけを加える。
 - 両版とも、日ごとの画像を表示するため `img-src` に `blob:` を含める（外部への通信は許可しない）。
@@ -268,6 +268,7 @@
 ## 8. 画面デザイン
 
 - 既存のスマートフォン向けデザインを基本とし、指示されていない変更はしない。
+- 常にダークモードの配色にする（端末の設定による切り替えや、アプリ内の切り替えは作らない）。`color-scheme: dark` を指定し、色はすべて `src/styles.css` の `:root` のCSS変数にまとめる。背景 `#121212`、面（カード・入力欄・メニュー・確認画面）`#1e1e1e`〜`#2a2a2a`、文字は白〜明るいグレー、補足は中間のグレー、緑・赤・土日の色は暗い背景で見やすい明るめの色。文字と背景のコントラストは4.5:1以上を目安にする。
 - ボタンやアイコンを必要以上に増やさない。
 - 時刻行と経過時間行を見分けられるようにする。
 - 時刻とタイトル、経過時間タイトルと所要時間は、それぞれ同じ行に表示する。
