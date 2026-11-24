@@ -1,7 +1,10 @@
 export type Option = { id: string; name: string; deleted?: true };
 export type Entry = { id: string; time: string; nextDay: boolean; freeTitle: string; titleId: string | null; elapsedTitle: string };
 export type Day = { title: string; memo: string; entries: Entry[] };
-export type Data = { version: 2; titles: Option[]; days: Record<string, Day>; featureMemo?: string };
+// プリセットは時刻の予定だけを持つ（日付タイトル・メモ・画像は含めない）。
+export type PresetEntry = Omit<Entry, 'id'>;
+export type Preset = { id: string; name: string; entries: PresetEntry[] };
+export type Data = { version: 2; titles: Option[]; days: Record<string, Day>; featureMemo?: string; presets?: Preset[] };
 let sequence = 0;
 export function createId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') return crypto.randomUUID();
@@ -71,5 +74,36 @@ export function saveOption(data: Data, option: Option): Data {
   const old = data.titles.find(o => o.id === option.id);
   if (old?.deleted) throw new Error('削除済みの候補は編集できません。');
   return { ...data, titles: old ? data.titles.map(o => o.id === option.id ? { ...option, name } : o) : [...data.titles, { ...option, name }] };
+}
+function presetName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed || /[\r\n]/.test(trimmed)) throw new Error('名前を1行で入力してください。');
+  return trimmed;
+}
+export function findPreset(data: Data, name: string): Preset | undefined { return data.presets?.find(p => p.name === name.trim()); }
+// その日の予定からプリセットを作る。同じ名前があれば中身を置き換える（上書きの確認は画面側で行う）。
+export function savePreset(data: Data, date: string, name: string): Data {
+  const entries = sortedEntries(data.days[date]?.entries ?? []).map(({ id: _id, ...rest }) => ({ ...rest }));
+  if (!entries.length) throw new Error('この日には予定がありません。');
+  const trimmed = presetName(name), presets = data.presets ?? [], existing = presets.find(p => p.name === trimmed);
+  return { ...data, presets: existing ? presets.map(p => p.id === existing.id ? { ...p, entries } : p) : [...presets, { id: createId(), name: trimmed, entries }] };
+}
+export function renamePreset(data: Data, id: string, name: string): Data {
+  const trimmed = presetName(name), presets = data.presets ?? [];
+  if (!presets.some(p => p.id === id)) throw new Error('プリセットが見つかりません。');
+  if (presets.some(p => p.id !== id && p.name === trimmed)) throw new Error('同じ名前のプリセットがあります。');
+  return { ...data, presets: presets.map(p => p.id === id ? { ...p, name: trimmed } : p) };
+}
+export function removePreset(data: Data, id: string): Data { return { ...data, presets: (data.presets ?? []).filter(p => p.id !== id) }; }
+// プリセットをその日に反映する。replace は時刻をすべて置き換え、add は同じ絶対時刻の予定を飛ばして追加する。
+export function applyPreset(data: Data, date: string, id: string, mode: 'replace' | 'add'): { data: Data; added: number; skipped: number } {
+  const preset = data.presets?.find(p => p.id === id);
+  if (!preset) throw new Error('プリセットが見つかりません。');
+  const current = mode === 'replace' ? [] : data.days[date]?.entries ?? [], taken = new Set(current.map(absoluteTime)), added: Entry[] = [];
+  for (const entry of preset.entries) {
+    if (taken.has(absoluteTime(entry))) continue;
+    taken.add(absoluteTime(entry)); added.push({ ...entry, id: createId() });
+  }
+  return { data: setDay(data, date, { entries: [...current, ...added] }), added: added.length, skipped: preset.entries.length - added.length };
 }
 export function orderOptions(data: Data, options: Option[]): Data { return { ...data, titles: [...options, ...data.titles.filter(o => o.deleted)] }; }

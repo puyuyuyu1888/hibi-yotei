@@ -40,7 +40,7 @@ test('今日が初期位置・既存の固定列と省略表示・日付タイ�
     });
     // Today's row keeps the row geometry; the title starts after the 今日 badge and stays inside the row.
     expect(layout).toMatchObject({ height: 65, top: 104, font: '14px', color: 'rgb(37, 60, 50)', background: 'rgb(234, 240, 230)', dateColor: 'rgb(51, 92, 75)', dateWeight: '700' });
-    expect(layout.titleX).toBeGreaterThan(129); expect(layout.titleRight).toBeLessThanOrEqual(layout.rowRight);
+    expect(layout.titleX).toBe(129); expect(layout.titleRight).toBeLessThanOrEqual(layout.rowRight);
     expect(layout.dateY).toBe(layout.titleY);
   }
   await page.setViewportSize({ width: 320, height: 740 });
@@ -88,7 +88,7 @@ test('年越し・うるう日・日付変更でスクロール位置を勝手�
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await page.getByRole('button', { name: '予定一覧', exact: true }).click(); expect((await anchor(page)).date).toBe('2024-01-01');
   await move(page, -2); await expect(page.locator('[data-date="2023-12-31"] .ten-day-date')).toHaveText('12月31日（日）');
-  await expect(page.locator('[data-date="2024-01-01"] .ten-day-date')).toHaveText('1月1日（月）今日');
+  await expect(page.locator('[data-date="2024-01-01"] .ten-day-date')).toHaveText('1月1日（月）');
   await expect(page.locator('.ten-day-row.is-today')).toHaveCount(1); await expect(page.locator('.ten-day-row.is-today')).toHaveAttribute('data-date', '2024-01-01');
   await move(page, 60); await expect(page.locator('[data-date="2024-02-29"] .ten-day-date')).toHaveText('2月29日（木）');
   await expect(page.locator('[data-date="2024-03-01"] .ten-day-date')).toHaveText('3月1日（金）');

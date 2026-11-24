@@ -1,5 +1,5 @@
 import { test,expect } from '@playwright/test';
-import { add,day,fixture,manage,open,stored,today } from './touch';
+import { add,day,fixture,open,stored,today } from './touch';
 
 test('デバウンス前の再読み込みでも日付・メモ・区間タイトルを復元する',async({page})=>{
   await open(page);await stored(page,fixture());await page.reload();await day(page);
@@ -22,11 +22,11 @@ test('現在表示は時刻と区間を区別し、翌日の予定には干渉�
   await page.clock.setSystemTime(new Date('2026-11-06T23:30:00+09:00'));await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await expect(page.getByLabel('現在の予定').locator('..')).toHaveClass(/elapsed-row/);
   await page.getByRole('button',{name:'カレンダーに戻る'}).click();await day(page,'2026-11-07');await expect(page.locator('.time-row,.elapsed-row')).toHaveCount(0);await expect(page.getByLabel('現在の予定')).toHaveCount(0);
 });
-test('全体メモ（featureMemo）をメニューの「メモ」から開き、自動保存し、再読み込み後も復元する',async({page})=>{
-  await open(page);await stored(page,fixture());await page.reload();await manage(page,'メモ');
-  await expect(page.locator('h1')).toHaveText('メモ');const memo=page.getByRole('textbox',{name:'全体メモ',exact:true});await expect(memo).toHaveValue('');expect(await memo.getAttribute('placeholder')).toBeNull();
+test('全体メモ（featureMemo）はカレンダーの下で自動保存し、再読み込み後も復元する。メニューには「メモ」がない',async({page})=>{
+  await open(page);await stored(page,fixture());await page.reload();
+  const memo=page.getByRole('textbox',{name:'全体メモ',exact:true});await expect(memo).toHaveValue('');expect(await memo.getAttribute('placeholder')).toBeNull();
+  await page.getByRole('button',{name:'メニュー',exact:true}).click();await expect(page.getByRole('button',{name:'メモ',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'閉じる',exact:true}).click();
   await memo.fill('改善案\n  2行目');await page.clock.runFor(600);expect((await stored(page)).featureMemo).toBe('改善案\n  2行目');
-  await page.getByRole('button',{name:'管理画面を閉じる'}).click();await expect(page.getByRole('region',{name:'月間カレンダー'})).toBeVisible();
-  await page.reload();await manage(page,'メモ');await expect(memo).toHaveValue('改善案\n  2行目');
+  await page.reload();await expect(memo).toHaveValue('改善案\n  2行目');
   const after=await stored(page);const {featureMemo,...rest}=after;expect(rest).toEqual(fixture());
 });

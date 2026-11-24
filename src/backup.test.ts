@@ -21,3 +21,11 @@ it('機能追加用メモを往復し、項目がない旧データも読み込�
   expect(validateData(fixture())).not.toHaveProperty('featureMemo');
   expect(()=>validateData({...fixture(),featureMemo:1})).toThrow();
 });
+it('プリセットを往復し、項目がない既存データ・バックアップも読み込み、不正なプリセットは拒否する',()=>{
+  const preset={id:'p1',name:'平日',entries:[{time:'08:00',nextDay:false,freeTitle:'朝の',titleId:'title-0',elapsedTitle:'準備'},{time:'08:00',nextDay:true,freeTitle:'翌朝',titleId:null,elapsedTitle:''}]};
+  const data={...fixture(),presets:[preset]};expect(parseBackup(serializeBackup(data))).toEqual(data);
+  expect(validateData(fixture())).not.toHaveProperty('presets');
+  const bad=[(p:any)=>{p.name='';},(p:any)=>{p.name=' 平日';},(p:any)=>{p.entries[0].titleId='missing';},(p:any)=>{p.entries[0].time='25:00';},(p:any)=>{p.entries[1].nextDay=false;},(p:any)=>{p.entries[0].id='a';},(p:any)=>{p.entries[0].freeTitle='';p.entries[0].titleId=null;}];
+  for(const mutate of bad){const copy=JSON.parse(JSON.stringify(data));mutate(copy.presets[0]);expect(()=>validateData(copy)).toThrow();}
+  expect(()=>validateData({...fixture(),presets:[preset,{...preset,id:'p2'}]})).toThrow();expect(()=>validateData({...fixture(),presets:[preset,{...preset,name:'別'}]})).toThrow();expect(()=>validateData({...fixture(),presets:{}})).toThrow();
+});

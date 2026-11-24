@@ -70,6 +70,34 @@ export async function persistData(db: AppDatabase, data: Data): Promise<void> {
   });
 }
 
+// 日ごとの画像。予定データ（'data'）とは別のキー（image:<日付>:<ID>）に Blob のまま保存する。
+// エクスポート・インポートの対象外。IndexedDB が使えない環境では保存できない。
+export type StoredImage = { id: string; date: string; blob: Blob; createdAt: number };
+const imageRange = (date: string) => IDBKeyRange.bound(`image:${date}:`, `image:${date}:￿`);
+function imageDatabase(db: AppDatabase): IDBDatabase {
+  if ('mode' in db) throw new Error('このブラウザーでは画像を保存できません。');
+  return db;
+}
+export async function listImages(db: AppDatabase, date: string): Promise<StoredImage[]> {
+  if ('mode' in db) return [];
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('app', 'readonly'), request = tx.objectStore('app').getAll(imageRange(date));
+    tx.oncomplete = () => resolve((request.result as StoredImage[]).sort((a, b) => a.createdAt - b.createdAt));
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('画像を読み込めませんでした。'));
+  });
+}
+export async function addImage(db: AppDatabase, date: string, file: Blob, id: string, createdAt = Date.now()): Promise<StoredImage> {
+  const idb = imageDatabase(db);
+  if (!file.type.startsWith('image/')) throw new Error('画像ファイルを選んでください。');
+  const image: StoredImage = { id, date, blob: new Blob([file], { type: file.type }), createdAt };
+  await transaction(idb, store => { store.put(image, `image:${date}:${id}`); });
+  return image;
+}
+export async function deleteImage(db: AppDatabase, date: string, id: string): Promise<void> {
+  await transaction(imageDatabase(db), store => { store.delete(`image:${date}:${id}`); });
+}
+
 const RECOVERY_KEY = 'import-recovery';
 type Recovery = { hadData: boolean; previous: unknown };
 function transaction(db: IDBDatabase, operation: (store: IDBObjectStore, tx: IDBTransaction) => void): Promise<void> {

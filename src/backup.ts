@@ -14,7 +14,7 @@ function text(value: unknown, singleLine = false): asserts value is string {
   if (typeof value !== 'string' || singleLine && /[\r\n]/.test(value)) invalid('文字列が不正です。');
 }
 export function validateData(value: unknown): Data {
-  record(value, ['version', 'titles', 'days', 'featureMemo']);
+  record(value, ['version', 'titles', 'days', 'featureMemo', 'presets']);
   if (value.version !== 2) invalid('未対応のデータバージョンです。');
   if ('featureMemo' in value) text(value.featureMemo);
   if (!Array.isArray(value.titles)) invalid('タイトル候補がありません。');
@@ -43,6 +43,29 @@ export function validateData(value: unknown): Data {
       try { if (normalizeTime(entry.time) !== entry.time) invalid('時刻はHH:MM形式が必要です。'); total = absoluteTime(entry as unknown as Data['days'][string]['entries'][number]); }
       catch { return invalid('時刻が不正です。'); }
       if (times.has(total)) invalid('同じ絶対時刻が重複しています。'); times.add(total);
+    }
+  }
+  // プリセット（省略可能）。ない既存データ・バックアップもそのまま読み込む。
+  if ('presets' in value) {
+    if (!Array.isArray(value.presets)) invalid('プリセットが不正です。');
+    const presetIds = new Set<string>(), presetNames = new Set<string>();
+    for (const preset of value.presets) {
+      record(preset, ['id', 'name', 'entries']); id(preset.id); text(preset.name, true);
+      if (!preset.name.trim() || preset.name !== preset.name.trim() || presetIds.has(preset.id) || presetNames.has(preset.name)) invalid('プリセットが不正です。');
+      presetIds.add(preset.id); presetNames.add(preset.name);
+      if (!Array.isArray(preset.entries)) invalid('プリセットの時刻一覧がありません。');
+      const times = new Set<number>();
+      for (const entry of preset.entries) {
+        record(entry, ['time', 'nextDay', 'freeTitle', 'titleId', 'elapsedTitle']);
+        text(entry.time); text(entry.freeTitle, true); text(entry.elapsedTitle, true);
+        if (typeof entry.nextDay !== 'boolean') invalid('翌日の指定が不正です。');
+        if (entry.titleId !== null && (typeof entry.titleId !== 'string' || !ids.has(entry.titleId))) invalid('タイトル候補の参照先がありません。');
+        if (!entry.freeTitle.trim() && entry.titleId === null) invalid('時刻タイトルがありません。');
+        let total: number;
+        try { if (normalizeTime(entry.time) !== entry.time) invalid('時刻はHH:MM形式が必要です。'); total = absoluteTime(entry as unknown as Data['days'][string]['entries'][number]); }
+        catch { return invalid('時刻が不正です。'); }
+        if (times.has(total)) invalid('同じ絶対時刻が重複しています。'); times.add(total);
+      }
     }
   }
   return value as unknown as Data;

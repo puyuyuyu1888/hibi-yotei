@@ -68,7 +68,7 @@ export function TenDayList({ data, today, position, onSelect }: {
       const label = `${date.getMonth() + 1}月${date.getDate()}日（${weekdays[date.getDay()]}）`;
       return <article className={`ten-day-row${isToday ? ' is-today' : ''}`} data-date={key} key={key}>
         <button className="ten-day-heading" onClick={() => onSelect(key)} aria-label={isToday ? `${label} 今日${day?.title ? ` ${day.title}` : ''}` : undefined}>
-          <span className={`ten-day-date weekday-${(date.getDay() + 6) % 7}`}>{label}{isToday && <span className="today-badge" aria-hidden="true">今日</span>}</span>
+          <span className={`ten-day-date weekday-${(date.getDay() + 6) % 7}`}>{label}</span>
           {day?.title && <span className="ten-day-title" title={day.title}>{day.title}</span>}
         </button>
       </article>;

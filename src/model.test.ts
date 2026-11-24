@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { absoluteTime, activeOptions, calendarDays, clearEntries, displayTitle, initialData, normalizeTime, orderOptions, removeEntry, removeOption, saveEntry, saveOption, setDay, setElapsedTitle, sortedEntries, tenDayDates, validDate, type Entry } from './model';
+import { validateData } from './backup';
+import { absoluteTime, activeOptions, applyPreset, calendarDays, clearEntries, displayTitle, findPreset, removePreset, renamePreset, savePreset, initialData, normalizeTime, orderOptions, removeEntry, removeOption, saveEntry, saveOption, setDay, setElapsedTitle, sortedEntries, tenDayDates, validDate, type Entry } from './model';
 const entry = (id: string, time: string, nextDay = false): Entry => ({ id, time, nextDay, freeTitle: '', titleId: 'title-0', elapsedTitle: '' });
 describe('時刻・タイトルと自動配置', () => {
   it('自由入力・選択・両方を別々に保存し、空白を挿入しない', () => {
@@ -57,5 +58,52 @@ describe('その日の時刻の全削除', () => {
     expect(cleared.days['2026-11-23']).toBe(data.days['2026-11-23']);
     expect(cleared.titles).toBe(data.titles); expect(cleared.featureMemo).toBe('改善案'); expect(cleared.version).toBe(2);
     expect(JSON.stringify(data)).toBe(before);
+  });
+});
+describe('プリセット', () => {
+  const base = () => {
+    let data = initialData();
+    data = saveEntry(data, '2026-11-22', { ...entry('a', '08:00'), freeTitle: '朝の' });
+    data = saveEntry(data, '2026-11-22', { ...entry('b', '01:00', true), titleId: null, freeTitle: '深夜' });
+    data = setElapsedTitle(data, '2026-11-22', 'a', '準備');
+    return setDay(data, '2026-11-22', { title: '日付タイトル', memo: 'メモ' });
+  };
+  it('その日の時刻だけを時刻順に保存し（ID・日付タイトル・メモは含めない）、同じ名前は上書きする', () => {
+    let data = savePreset(base(), '2026-11-22', '  平日  ');
+    expect(data.presets).toHaveLength(1);
+    expect(data.presets![0]).toMatchObject({ name: '平日', entries: [{ time: '08:00', nextDay: false, freeTitle: '朝の', titleId: 'title-0', elapsedTitle: '準備' }, { time: '01:00', nextDay: true, freeTitle: '深夜', titleId: null, elapsedTitle: '' }] });
+    expect(JSON.stringify(data.presets)).not.toMatch(/"id":"a"|日付タイトル|メモ/);
+    const id = data.presets![0].id;
+    data = removeEntry(data, '2026-11-22', 'b'); data = savePreset(data, '2026-11-22', '平日');
+    expect(data.presets).toHaveLength(1); expect(data.presets![0].id).toBe(id); expect(data.presets![0].entries).toHaveLength(1);
+    expect(findPreset(data, ' 平日 ')?.id).toBe(id);
+    expect(() => savePreset(data, '2026-11-23', '空')).toThrow('予定がありません');
+    expect(() => savePreset(data, '2026-11-22', '  ')).toThrow('名前');
+    expect(validateData(JSON.parse(JSON.stringify(data)))).toEqual(data);
+  });
+  it('上書きは時刻を置き換え、追加は同じ絶対時刻を飛ばす。日付タイトル・メモ・他の日は変えない', () => {
+    let data = savePreset(base(), '2026-11-22', '平日');
+    const id = data.presets![0].id;
+    data = saveEntry(data, '2026-11-23', { ...entry('c', '08:00'), freeTitle: '既存' });
+    data = setDay(data, '2026-11-23', { title: '別の日', memo: '別のメモ' });
+    const added = applyPreset(data, '2026-11-23', id, 'add');
+    expect(added).toMatchObject({ added: 1, skipped: 1 });
+    expect(sortedEntries(added.data.days['2026-11-23'].entries).map(e => [e.time, e.nextDay, e.freeTitle])).toEqual([['08:00', false, '既存'], ['01:00', true, '深夜']]);
+    expect(added.data.days['2026-11-23']).toMatchObject({ title: '別の日', memo: '別のメモ' });
+    const replaced = applyPreset(data, '2026-11-23', id, 'replace');
+    expect(replaced).toMatchObject({ added: 2, skipped: 0 });
+    expect(replaced.data.days['2026-11-23'].entries.map(e => e.freeTitle)).toEqual(['朝の', '深夜']);
+    expect(replaced.data.days['2026-11-23'].entries[0].elapsedTitle).toBe('準備');
+    const ids = replaced.data.days['2026-11-23'].entries.map(e => e.id);
+    expect(new Set([...ids, 'a', 'b']).size).toBe(4);
+    expect(replaced.data.days['2026-11-22']).toBe(data.days['2026-11-22']);
+    expect(validateData(JSON.parse(JSON.stringify(replaced.data)))).toEqual(replaced.data);
+  });
+  it('名前の変更は重複を拒否し、削除は他のプリセットを残す', () => {
+    let data = savePreset(base(), '2026-11-22', 'A'); data = savePreset(data, '2026-11-22', 'B');
+    const [a, b] = data.presets!;
+    expect(() => renamePreset(data, a.id, 'B')).toThrow('同じ名前');
+    data = renamePreset(data, a.id, ' 休日 '); expect(data.presets!.map(p => p.name)).toEqual(['休日', 'B']);
+    data = removePreset(data, a.id); expect(data.presets!.map(p => p.id)).toEqual([b.id]);
   });
 });

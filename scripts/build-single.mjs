@@ -26,9 +26,9 @@ const css = styles.map(o => o.source).join('\n');
 if (/@import\b|url\s*\(|<\/style/i.test(css)) throw new Error('外部素材を参照するCSSは使用できません。');
 const icon = await readFile(path.join(root, 'public/icon.svg'), 'utf8');
 const license = await readFile(path.join(root, 'node_modules/react/LICENSE'), 'utf8');
-const baseCsp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'";
+const baseCsp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'";
 // PWA版だけ、manifest・Service Worker・manifestのアイコンに必要な同一オリジンの読み込みを許可する。connect-src 'none' は維持する。
-const pwaCsp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: 'self'; font-src 'none'; connect-src 'none'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'";
+const pwaCsp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob: 'self'; font-src 'none'; connect-src 'none'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'";
 const page = (csp, extraHead = '') => `<!doctype html>
 <html lang="ja">
 <head>
@@ -37,7 +37,7 @@ const page = (csp, extraHead = '') => `<!doctype html>
   <meta name="theme-color" content="#335c4b">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,${Buffer.from(icon).toString('base64')}">${extraHead}
-  <title>日々の予定</title>
+  <title>スケジュール</title>
   <style>${css}</style>
 </head>
 <body>
@@ -58,7 +58,7 @@ console.log(`単一HTML: ${path.join(root, 'index.html')} (${(Buffer.byteLength(
 const dist = path.join(root, 'dist');
 const icons = ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 const manifest = JSON.stringify({
-  id: './', name: '日々の予定', short_name: '日々の予定', lang: 'ja', start_url: './', scope: './',
+  id: './', name: 'スケジュール', short_name: 'スケジュール', lang: 'ja', start_url: './', scope: './',
   display: 'standalone', theme_color: '#335c4b', background_color: '#f7f8f4',
   icons: [
     { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

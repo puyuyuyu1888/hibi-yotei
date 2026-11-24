@@ -17,7 +17,7 @@ test('manifest・アイコン・Service Worker を読み込み、インストー
   await expect(page.getByRole('region', { name: '月間カレンダー' })).toBeVisible();
   const href = await page.locator('link[rel="manifest"]').getAttribute('href');
   const manifest = await (await request.get(new URL(href!, pwaUrl).href)).json();
-  expect(manifest).toMatchObject({ name: '日々の予定', display: 'standalone', theme_color: '#335c4b', background_color: '#f7f8f4', start_url: './' });
+  expect(manifest).toMatchObject({ id: './', name: 'スケジュール', short_name: 'スケジュール', display: 'standalone', theme_color: '#335c4b', background_color: '#f7f8f4', start_url: './' });
   expect(manifest.icons.map((i: { sizes: string; purpose: string }) => `${i.sizes}:${i.purpose}`)).toEqual(['192x192:any', '512x512:any', '512x512:maskable']);
   for (const icon of manifest.icons) {
     const response = await request.get(new URL(icon.src, pwaUrl).href);
